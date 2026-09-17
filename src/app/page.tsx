@@ -1,69 +1,64 @@
-import Image from "next/image";
-
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+'use client';
+import {flushSync} from 'react-dom';
+import {registerAtlasTools} from './agent-tools';
+import {useEffect,useMemo,useRef,useState} from 'react';
+import {Activity,ArrowLeft,ArrowUpRight,ChevronRight,FlipHorizontal,FlipVertical,Focus,Info,Layers3,Pause,RotateCcw,RotateCw,Scissors,Search,X} from 'lucide-react';
+import {Button} from '@/components/ui/button';
+import {Badge} from '@/components/ui/badge';
+import {Slider} from '@/components/ui/slider';
+import {Switch} from '@/components/ui/switch';
+import {Sheet,SheetContent,SheetTitle,SheetDescription} from '@/components/ui/sheet';
+import {Combobox,ComboboxInput,ComboboxContent,ComboboxList,ComboboxItem,ComboboxEmpty} from '@/components/ui/combobox';
+import AnatomyScene from './scene';
+import {DEFAULT_VISIBLE,SYSTEMS,EXPLANATIONS,HIGHLIGHT_COLORS,explanation,displayName,type Atlas,type Concept,type SceneState,type SystemId,type View} from './anatomy';
+const initial:SceneState={explode:0,visible:DEFAULT_VISIBLE,selected:[],isolate:false,view:'three-quarter',rotate:false,reset:0,cross:'none',crossAmount:.5,crossInvert:false,highlightColor:null};
+const VIEW_LABEL:Record<View,string>={'three-quarter':'Üç Çeyrek','front':'Ön','side':'Yan','back':'Arka'};
+export default function Home(){
+ const detailTitle=useRef<HTMLHeadingElement>(null);
+ const [atlas,setAtlas]=useState<Atlas|null>(null),[state,setState]=useState(initial),[progress,setProgress]=useState(0),[error,setError]=useState(''),[panel,setPanel]=useState<'layers'|'search'|'cross'|null>(null),[details,setDetails]=useState(false),[about,setAbout]=useState(false),[query,setQuery]=useState(''),[chosen,setChosen]=useState<Concept|null>(null),[history,setHistory]=useState<Concept[]>([]);
+ useEffect(()=>{const abort=new AbortController();setProgress(0);setError('');setAtlas(null);setChosen(null);setDetails(false);setState({...initial,visible:DEFAULT_VISIBLE});fetch('/models/atlas.json',{signal:abort.signal}).then(r=>{if(!r.ok)throw new Error('Anatomi kataloğu yüklenemedi.');return r.json();}).then(data=>setAtlas(data as Atlas)).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>abort.abort();},[]);
+ useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='/'&&!(e.target instanceof HTMLInputElement)&&!(e.target instanceof HTMLTextAreaElement)){e.preventDefault();setPanel('search');setDetails(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
+ const parts=useMemo(()=>new Map(atlas?.parts.map(p=>[p.id,p])),[atlas]);
+ const counts=useMemo(()=>Object.fromEntries(SYSTEMS.map(s=>[s.id,atlas?.parts.filter(p=>p.system===s.id).length??0])),[atlas]);
+ const activeSystems=SYSTEMS.filter(s=>counts[s.id]>0);
+ const selectedParts=state.selected.map(id=>parts.get(id)).filter(p=>!!p),selected=selectedParts[0],system=SYSTEMS.find(s=>s.id===selected?.system);
+ const visibleCount=atlas?.parts.filter(p=>state.isolate?state.selected.includes(p.id):state.visible.includes(p.system)||state.selected.includes(p.id)).length??0;
+ const results=useMemo(()=>{if(!atlas)return[];const term=query.toLowerCase().trim();if(!term)return ['heart','brain','liver','stomach','spleen','pancreas','urinary bladder','trachea'].map(name=>atlas.concepts.find(c=>c.name.toLowerCase()===name)).filter((x):x is Concept=>!!x);return atlas.concepts.filter(c=>c.name.toLowerCase().includes(term)||c.id.toLowerCase().includes(term)).sort((a,b)=>a.name.length-b.name.length).slice(0,80);},[atlas,query]);
+ const choose=(c:Concept)=>{setHistory([]);setChosen(c);setState(s=>({...s,selected:c.elements,isolate:false,rotate:false,highlightColor:null}));setDetails(true);setPanel(null);};
+ useEffect(()=>{if(!atlas)return;return registerAtlasTools(atlas,c=>flushSync(()=>choose(c)));},[atlas]);
+ const choosePart=(id:string)=>{const p=parts.get(id);if(!p)return;if(state.isolate&&chosen)setHistory(h=>[...h,chosen]);setChosen({id:p.conceptId,name:p.name,elements:[id]});setState(s=>({...s,selected:[id],rotate:false,highlightColor:null}));setDetails(true);setPanel(null);};
+ const goBack=()=>{if(!history.length)return;const prev=history[history.length-1];setHistory(h=>h.slice(0,-1));setChosen(prev);setState(s=>({...s,selected:prev.elements,highlightColor:null}));setDetails(true);};
+ const toggle=(id:SystemId)=>{setDetails(false);setState(s=>({...s,selected:[],isolate:false,visible:s.visible.includes(id)?s.visible.filter(x=>x!==id):[...s.visible,id]}));};
+ const reset=()=>{setState(s=>({...initial,visible:DEFAULT_VISIBLE,reset:s.reset+1}));setChosen(null);setDetails(false);setPanel(null);setHistory([]);};
+ const openPanel=(next:'layers'|'search')=>{setDetails(false);setPanel(p=>p===next?null:next);};
+ return <main className="studio">
+  {atlas&&<AnatomyScene atlas={atlas} state={{...state,inspectorOpen:details&&selectedParts.length>0}} onSelect={choosePart} onProgress={n=>{setProgress(n);if(n===100)setError('');}} onError={setError}/>}
+  <div className="vignette"/>
+  <header className="identity"><div className="eyebrow"><span className="status-dot"/> İNTERAKTİF ANATOMİ</div><h1>Anatomi Atölyesi<Badge variant="outline" className="edition">3B</Badge></h1><div className="identity-meta">{atlas?atlas.parts.length.toLocaleString('tr-TR'):'2.234'} modellenmiş parça <span>·</span> BodyParts3D</div></header>
+  <nav className="top-actions" aria-label="Gezgin panelleri"><Button variant="ghost" className={panel==='search'?'active':''} onClick={()=>openPanel('search')} aria-label="Anatomide ara"><Search size={18}/><span>Yapı ara</span><kbd>/</kbd></Button><Button variant="ghost" className={`icon-button ${panel==='cross'||state.cross!=='none'?'active':''}`} aria-label="Kesit al" title="Kesit al" onClick={()=>{if(panel==='cross'){setPanel(null);}else{setDetails(false);setPanel('cross');setState(s=>s.cross==='none'?{...s,cross:'top'}:s);}}}><Scissors size={18}/></Button><Button variant="ghost" className="icon-button" aria-label="Bu atlas hakkında" onClick={()=>{setDetails(false);setPanel(null);setAbout(true);}}><Info size={18}/></Button></nav>
+  <section className={`layers-panel glass ${panel==='layers'?'mobile-open':''}`} aria-label="Anatomik katmanlar">
+   <div className="panel-heading"><span>Sistemler</span><Button variant="ghost" className="mobile-only icon-button" onClick={()=>setPanel(null)} aria-label="Sistemleri kapat"><X size={18}/></Button><Badge variant="secondary" className="desktop-only small-number">{activeSystems.length}</Badge></div>
+   <div className="layer-presets"><Button variant="ghost" aria-pressed={activeSystems.every(x=>state.visible.includes(x.id))} onClick={()=>setState(s=>({...s,selected:[],isolate:false,visible:activeSystems.map(x=>x.id)}))}>Tümü</Button><Button variant="ghost" aria-pressed={state.visible.length===1&&state.visible[0]==='skeletal'} onClick={()=>setState(s=>({...s,selected:[],isolate:false,visible:['skeletal']}))}>İskelet</Button><Button variant="ghost" aria-pressed={state.visible.length===6&&['cardiac','respiratory','digestive','urinary','endocrine','reproductive'].every(id=>state.visible.includes(id as SystemId))} onClick={()=>setState(s=>({...s,selected:[],isolate:false,visible:['cardiac','respiratory','digestive','urinary','endocrine','reproductive']}))}>Organlar</Button></div>
+   <div className="system-list">{activeSystems.map(s=><div className={`system-row ${state.visible.includes(s.id)?'enabled':''}`} key={s.id}><Button variant="ghost" className="system-name" title={`Sadece ${s.name.toLocaleLowerCase('tr-TR')} göster`} onClick={()=>setState(v=>({...v,visible:[s.id],isolate:false,selected:[]}))}><span className="system-dot" style={{background:s.color}}/>{s.name}<span className="system-count">{counts[s.id]}</span></Button><Switch checked={state.visible.includes(s.id)} onCheckedChange={()=>toggle(s.id)} aria-label={`${s.name} göster`} /></div>)}</div>
+   <div className="panel-foot"><span>{visibleCount.toLocaleString('tr-TR')} parça görünür</span><Button variant="ghost" onClick={()=>setState(s=>({...s,visible:[],selected:[],isolate:false}))}>Tümünü gizle</Button></div>
+  </section>
+  {panel==='search'&&<section className="search-panel glass" aria-label="Anatomide ara"><div className="panel-heading"><span>Yapı ara</span><Button variant="ghost" className="icon-button" onClick={()=>setPanel(null)} aria-label="Aramayı kapat"><X size={18}/></Button></div><Combobox<Concept> items={results} value={null} onValueChange={value=>{if(value)choose(value);}} inputValue={query} onInputValueChange={setQuery} itemToStringLabel={c=>c.name} filter={null} open onOpenChange={open=>{if(!open)setPanel(null);}}><ComboboxInput autoFocus placeholder="Kalp, femur, kraniyal sinir…" aria-label="İsimlendirilmiş anatomik yapılarda ara" showTrigger={false}/><ComboboxContent className="anatomy-search-results"><ComboboxEmpty>Aramanızla eşleşen yapı yok.</ComboboxEmpty><ComboboxList>{(c:Concept)=>{const d=displayName(c.name);return <ComboboxItem key={c.id} value={c}><span className="search-result-name">{d.primary}{d.secondary&&<em>{d.secondary}</em>}</span><span className="small-number">{c.elements.length} parça</span></ComboboxItem>;}}</ComboboxList></ComboboxContent></Combobox><p className="search-note">{query?"80'e kadar eşleşme gösteriliyor. Daha küçük yapıları bulmak için aramanızı daraltın.":'Büyük bir organla başlayın ya da isimlendirilmiş her yapıda arama yapın.'}</p></section>}
+  <nav className="view-controls glass" aria-label="Kamera kontrolleri">{(['three-quarter','front','side','back'] as View[]).map((v,i)=><Button variant="ghost" key={v} className={state.view===v?'active':''} aria-pressed={state.view===v} disabled={state.explode>.8&&v!=='front'} onClick={()=>setState(s=>({...s,view:v,reset:s.reset+1,rotate:false}))} title={`${VIEW_LABEL[v]} görünüm`} aria-label={`${VIEW_LABEL[v]} görünüm`}><span>{['¾','Ö','Y','A'][i]}</span></Button>)}<i/><Button variant="ghost" disabled={state.explode>=.4} aria-label={state.rotate?'Döndürmeyi durdur':'Vücudu döndür'} title="Otomatik döndür" className={state.rotate?'active':''} onClick={()=>setState(s=>({...s,rotate:!s.rotate}))}>{state.rotate?<Pause size={17}/>:<RotateCw size={18}/>}</Button><Button variant="ghost" aria-label="Görünümü ve katmanları sıfırla" title="Sıfırla" onClick={reset}><RotateCcw size={17}/></Button></nav>
+  {panel==='cross'&&<section className="search-panel cross-panel glass" aria-label="Kesit kontrolleri">
+   <div className="panel-heading"><span>Kesit</span><Button variant="ghost" className="icon-button" onClick={()=>setPanel(null)} aria-label="Kesit panelini kapat"><X size={18}/></Button></div>
+   <div className="cross-target"><span>Hedef</span><Button variant="ghost" className="cross-target-pick" onClick={()=>{setDetails(false);setPanel('search');}}>{state.selected.length?(chosen?displayName(chosen.name).primary:`${state.selected.length} parça`):'Tüm vücut'}<span className="small-number">Değiştir</span></Button></div>
+   <div className="cross-axis"><Button variant="ghost" aria-pressed={state.cross==='top'} onClick={()=>setState(s=>({...s,cross:'top'}))}>Üstten</Button><Button variant="ghost" aria-pressed={state.cross==='side'} onClick={()=>setState(s=>({...s,cross:'side'}))}>Yandan</Button></div>
+   <div className="cross-slider-row"><Slider aria-label="Kesit konumu" min={0} max={100} step={1} value={[state.crossAmount*100]} onValueChange={v=>setState(s=>({...s,crossAmount:(Array.isArray(v)?v[0]:v)/100}))}/><Button variant="ghost" className="icon-button" aria-pressed={state.crossInvert} aria-label="Kesit yönünü çevir" title="Yönü çevir" onClick={()=>setState(s=>({...s,crossInvert:!s.crossInvert}))}>{state.cross==='top'?<FlipVertical size={16}/>:<FlipHorizontal size={16}/>}</Button></div>
+   <p className="search-note">{state.selected.length?'Kaydırıcı seçili yapının kendi sınırlarına göre ölçekli — %50 her zaman onu ortalar.':'Hiçbir yapı seçili değil; kaydırıcı tüm vücudu esas alıyor. Belirli bir organı kesmek için üstteki hedeften bir yapı seçin.'}</p>
+   {state.selected.length>0&&<Button variant="ghost" className="cross-off" onClick={()=>setState(s=>({...s,selected:[]}))}>Hedefi temizle (tüm vücut)</Button>}
+   <Button variant="ghost" className="cross-off" aria-pressed={state.cross==='none'} onClick={()=>setState(s=>({...s,cross:'none'}))}>Kesiti kaldır</Button>
+  </section>}
+  <div className="scene-caption"><span className="caption-line"/><span>{state.isolate?(chosen?displayName(chosen.name).primary:'SEÇİLİ YAPI'):state.explode>.95?'ANATOMİK ENVANTER':state.explode>.05?'AYRILMIŞ YAPILAR':'YETİŞKİN İNSAN · ERKEK'}</span><span className="caption-line"/></div>
+  <div className="bottom-dock glass"><Button variant="ghost" className="mobile-only dock-layers" onClick={()=>openPanel('layers')} aria-label="Sistem katmanlarını aç"><Layers3 size={20}/><span>Sistemler</span></Button><div className="explode-control"><div className="explode-label"><label id="explode-label">Parçalara ayır</label><output>{Math.round(state.explode*100)}<span>%</span></output></div><Slider aria-labelledby="explode-label" min={0} max={100} step={1} value={[state.explode*100]} onValueChange={v=>setState(s=>({...s,explode:(Array.isArray(v)?v[0]:v)/100,view:(Array.isArray(v)?v[0]:v)>80?'front':s.view,rotate:false}))}/><div className="slider-endpoints"><span>Birleşik</span><span>Her parça</span></div></div><Button variant="ghost" className="dock-reset" onClick={reset} aria-label="Birleştir ve sıfırla"><RotateCcw size={18}/><span>Sıfırla</span></Button></div>
+  <footer className="studio-footer"><span>{state.explode>.8?'Kaydırmak için sürükle':'Döndürmek için sürükle'} <b>·</b> Yakınlaştırmak için sıkıştır <b>·</b> İncelemek için dokun</span><Button variant="ghost" onClick={()=>{setDetails(false);setPanel(null);setAbout(true);}}>Kaynak ve atıflar <ArrowUpRight size={12}/></Button></footer>
+  {progress<100&&!error&&<div className="loading glass" role="status"><Activity size={18}/><div><strong>Anatomi hazırlanıyor</strong><span>%{progress} · {atlas?.parts.length.toLocaleString('tr-TR')??'2.234'} parça yükleniyor</span><div className="loading-track"><i style={{width:`${progress}%`}}/></div></div></div>}
+  {error&&<div className="loading glass error" role="alert"><p>{error}</p><Button variant="ghost" onClick={()=>location.reload()}>Görüntüleyiciyi yeniden yükle</Button></div>}
+  <Sheet open={details&&selectedParts.length>0} modal={false} disablePointerDismissal onOpenChange={setDetails}><SheetContent initialFocus={detailTitle} className={`detail-sheet glass ${state.isolate?'is-isolated':''}`} showCloseButton={true}><div className="detail-header"><div className="detail-accent" style={{background:system?.color}}/><div className="eyebrow">{system?.name??'ANATOMİ'}</div><SheetTitle ref={detailTitle} tabIndex={-1} className="structure-title">{chosen?displayName(chosen.name).primary:''}</SheetTitle>{chosen&&displayName(chosen.name).secondary&&<div className="structure-latin">{displayName(chosen.name).secondary}</div>}</div><div className="detail-scroll" key={`${chosen?.id}-${state.isolate}`}><SheetDescription className="structure-description">{chosen&&selected?explanation(chosen.name,selected.system):''}</SheetDescription>{chosen&&!EXPLANATIONS[chosen.name.toLowerCase()]&&<span className="context-note">Sistem genel bakışı · yapı kaynak anatomiden tanımlandı</span>}<div className="structure-meta"><span>Atlas referansı<strong>{chosen?.id}</strong></span><span>Seçili parça<strong>{state.selected.length.toLocaleString('tr-TR')}</strong></span></div>{selectedParts.length>1&&<div className="member-list"><h3>Dahil olan yapılar</h3>{selectedParts.slice(0,50).map(p=><Button variant="ghost" key={p.id} onClick={()=>choosePart(p.id)}><span>{p.name}</span><ChevronRight size={14}/></Button>)}{selectedParts.length>50&&<p>Ve {selectedParts.length-50} modellenmiş parça daha.</p>}</div>}<a className="source-link" href="https://lifesciencedb.jp/bp3d/" target="_blank" rel="noreferrer">Anatomik kaynağı görüntüle <ArrowUpRight size={14}/></a></div><div className="detail-actions">{state.isolate&&history.length>0&&<Button variant="ghost" className="back-action" onClick={goBack}><ArrowLeft size={16}/>{displayName(history[history.length-1].name).primary}&apos;e dön</Button>}<Button className={`primary-action ${state.isolate?'active':''}`} onClick={()=>{if(state.isolate)setHistory([]);setState(s=>({...s,isolate:!s.isolate,explode:0,highlightColor:s.isolate?null:s.highlightColor}));}}><Focus size={18}/>{state.isolate?'Çevredeki anatomiyi göster':'Yapıyı izole et'}<ChevronRight size={16}/></Button>{state.isolate&&<div className="highlight-swatches" role="group" aria-label="Vurgu rengi seç">{HIGHLIGHT_COLORS.map(c=><button key={c.id} type="button" className="swatch" aria-pressed={(state.highlightColor??HIGHLIGHT_COLORS[0].hex)===c.hex} aria-label={c.label} title={c.label} style={{background:c.hex}} onClick={()=>setState(s=>({...s,highlightColor:c.hex}))}/>)}</div>}<Button variant="ghost" className="secondary-action" onClick={()=>{setState(s=>({...s,selected:[],isolate:false,highlightColor:null}));setDetails(false);setHistory([]);}}>Seçimi temizle</Button></div></SheetContent></Sheet>
+  <Sheet open={about} onOpenChange={setAbout}><SheetContent className="about-sheet glass"><div className="eyebrow">KAYNAK VE KAPSAM</div><SheetTitle className="structure-title">Bir beden, gözler önünde.</SheetTitle><SheetDescription>BodyParts3D'den yetişkin erkek referans anatomisini keşfedin.</SheetDescription><div className="about-copy"><p><strong>Erkek · BodyParts3D</strong><br/>Yetişkin erkek referans anatomisinden 2.234 ayrı mesh ve 3.432 isimlendirilmiş kavram.</p><p>Bu referans her insan yapısını veya varyasyonunu içermez. İsimlendirilmiş kavramlar birden fazla parça içerebilir; her kaynak mesh yalnızca bir kez render edilir.</p><p>Renkler ve sistem gruplamaları keşif için tasarlanmıştır. Geometri web için basitleştirilmiştir ve kısa açıklamalar genel eğitim bağlamı sunar. Bu bir anatomik referanstır, tanı veya cerrahi planlama aracı değildir.</p><h3>Kaynak</h3><p>BodyParts3D, © The Database Center for Life Science — CC Attribution 4.0 International lisansı ile lisanslanmıştır.</p><a href="https://dbarchive.biosciencedbc.jp/en/bodyparts3d/lic.html" target="_blank" rel="noreferrer">Veri seti lisansı <ArrowUpRight size={14}/></a><a href="https://dbarchive.biosciencedbc.jp/en/bodyparts3d/download.html" target="_blank" rel="noreferrer">Orijinal geometri ve metadata <ArrowUpRight size={14}/></a><a href="https://academic.oup.com/nar/article/37/suppl_1/D782/1000752" target="_blank" rel="noreferrer">Kaynak yayını oku <ArrowUpRight size={14}/></a><h3>Uyarlama</h3><p>Bu arayüz, <a href="https://github.com/ashemag/human-atlas" target="_blank" rel="noreferrer">ashemag/human-atlas</a> (MIT lisanslı) açık kaynak projesinin Türkçeleştirilmiş bir uyarlamasıdır.</p></div></SheetContent></Sheet>
+ </main>;
 }
